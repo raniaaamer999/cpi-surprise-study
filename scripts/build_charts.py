@@ -1,4 +1,4 @@
-"""Builds the four charts that summarize the CPI study."""
+"""Builds the six charts that summarize the CPI study."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ WINDOW_LABELS = {
 def style() -> None:
     plt.rcParams.update(
         {
-            "font.family": "DejaVu Sans",
+            "font.family": "Times New Roman",
             "font.size": 9,
             "axes.titlesize": 12,
             "axes.labelsize": 9,
@@ -65,9 +65,9 @@ def save(fig: Figure, name: str) -> Path:
     return path
 
 
-def cpi_forest(cpi: pd.DataFrame) -> Path:
-    # Focuses the main chart on the release day response to headline monthly CPI.
-    frame = cpi[(cpi.series == "headline_mom") & (cpi.window == "reaction_eod")].copy()
+def cpi_forest(cpi: pd.DataFrame, series: str, number: int) -> Path:
+    # Shows the release day response for one of the four CPI measures.
+    frame = cpi[(cpi.series == series) & (cpi.window == "reaction_eod")].copy()
     panels = (
         (["us_2y_yield", "us_10y_yield"], "Rates (basis points)", " bp"),
         (["eurusd", "sp500", "gold_gld_proxy"], "Other markets (%)", "%"),
@@ -106,7 +106,7 @@ def cpi_forest(cpi: pd.DataFrame) -> Path:
         ax.set_title(title, loc="left", fontsize=9, fontweight="bold")
         ax.grid(axis="x", color=LIGHT, lw=0.8)
     fig.suptitle(
-        "Headline CPI MoM: release day response across markets",
+        f"{SERIES_LABELS[series]} CPI: release day response across markets",
         x=0.08,
         ha="left",
         fontweight="bold",
@@ -136,7 +136,7 @@ def cpi_forest(cpi: pd.DataFrame) -> Path:
         fontsize=7,
     )
     fig.subplots_adjust(bottom=0.23, top=0.82, wspace=0.55)
-    return save(fig, "01_cpi_release_day_forest.png")
+    return save(fig, f"{number:02d}_cpi_release_day_{series}_forest.png")
 
 
 def significance_heatmap(cpi: pd.DataFrame) -> Path:
@@ -183,7 +183,7 @@ def significance_heatmap(cpi: pd.DataFrame) -> Path:
         loc="left",
         fontweight="bold",
     )
-    return save(fig, "02_cpi_significance_heatmap.png")
+    return save(fig, "05_cpi_significance_heatmap.png")
 
 
 def persistence_chart(persistence: pd.DataFrame) -> Path:
@@ -217,45 +217,7 @@ def persistence_chart(persistence: pd.DataFrame) -> Path:
         )
     ax.legend(frameon=False, loc="upper right", fontsize=7)
     ax.grid(axis="y", color=LIGHT)
-    return save(fig, "03_cpi_persistence.png")
-
-
-def regime_chart(regimes: pd.DataFrame) -> Path:
-    # Summarizes whether the estimated relationships changed after 2020.
-    order = ["reaction_eod", "reaction_1d", "reaction_5d"]
-    summary = regimes.groupby("window").agg(
-        smallest_q=("interaction_q_value_bh", "min"),
-        significant=("regime_change_significant_5pct_fdr", "sum"),
-        tests=("regime_change_significant_5pct_fdr", "size"),
-    )
-    summary = summary.loc[order]
-    fig, ax = plt.subplots(figsize=(7.2, 3.0))
-    bars = ax.bar(
-        [WINDOW_LABELS[item] for item in order],
-        summary.smallest_q,
-        color=[CYAN, "#7c91a5", "#9aa8b4"],
-        width=0.58,
-    )
-    ax.axhline(0.05, color="#b34f5b", ls="--", lw=1, label="FDR threshold")
-    ax.set_ylim(0, 1)
-    ax.set_ylabel("Smallest interaction q value")
-    ax.set_title(
-        "No regime slope change survives FDR correction", loc="left", fontweight="bold"
-    )
-    for bar, sig, tests in zip(
-        bars, summary.significant, summary.tests, strict=True
-    ):
-        ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height(),
-            f"{int(sig)} of {int(tests)} significant",
-            ha="center",
-            va="bottom",
-            fontsize=8,
-        )
-    ax.legend(frameon=False, loc="upper right", fontsize=7)
-    ax.grid(axis="y", color=LIGHT)
-    return save(fig, "04_regime_comparison.png")
+    return save(fig, "06_cpi_persistence.png")
 
 
 def main() -> None:
@@ -263,12 +225,13 @@ def main() -> None:
     CHARTS.mkdir(parents=True, exist_ok=True)
     cpi = pd.read_csv(RESULTS / "surprise_reactions.csv")
     persistence = pd.read_csv(RESULTS / "persistence.csv")
-    regimes = pd.read_csv(RESULTS / "regime_changes.csv")
     charts = (
-        cpi_forest(cpi),
+        cpi_forest(cpi, "headline_mom", 1),
+        cpi_forest(cpi, "headline_yoy", 2),
+        cpi_forest(cpi, "core_mom", 3),
+        cpi_forest(cpi, "core_yoy", 4),
         significance_heatmap(cpi),
         persistence_chart(persistence),
-        regime_chart(regimes),
     )
     print(f"Wrote {len(charts)} charts to {CHARTS}")
 

@@ -153,7 +153,7 @@ python run_pipeline.py
 ```
 
 The master runner cleans the private CPI input, builds the event dataset, runs
-the statistical analysis, creates the four charts, and runs the tests in the
+the statistical analysis, creates the six charts, and runs the tests in the
 correct order. It does not download public data unless that option is selected.
 
 To preview the steps without changing files:
@@ -189,7 +189,7 @@ Bloomberg access or internet access.
 src/macro_surprise/data/       downloads public data and cleans Bloomberg CPI data
 src/macro_surprise/analysis/   calculates surprises, reactions, and statistical results
 tests/                         checks the main calculations and error handling
-scripts/                       creates the four aggregate charts
+scripts/                       creates the six aggregate charts
 data/external/                 stores the public daily market data
 output/charts/                 stores the aggregate research figures
 run_pipeline.py                runs the complete study in the correct order

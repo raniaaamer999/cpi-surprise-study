@@ -77,7 +77,7 @@ def _build_steps(args: argparse.Namespace) -> list[Step]:
                 _python_module("macro_surprise.analysis.statistical_analysis"),
             ),
             Step(
-                "Generate four research charts",
+                "Generate six research charts",
                 _python_script("scripts/build_charts.py"),
             ),
         ]
