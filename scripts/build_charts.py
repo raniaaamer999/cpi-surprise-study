@@ -46,9 +46,11 @@ def style() -> None:
     plt.rcParams.update(
         {
             "font.family": "Times New Roman",
-            "font.size": 9,
-            "axes.titlesize": 12,
-            "axes.labelsize": 9,
+            "font.size": 10,
+            "axes.titlesize": 11,
+            "axes.labelsize": 10,
+            "xtick.labelsize": 10,
+            "ytick.labelsize": 10,
             "axes.edgecolor": "#b8c4ce",
             "axes.spines.top": False,
             "axes.spines.right": False,
@@ -98,12 +100,12 @@ def cpi_forest(cpi: pd.DataFrame, series: str, number: int) -> Path:
                 transform=ax.get_yaxis_transform(),
                 ha="right",
                 va="center",
-                fontsize=8,
+                fontsize=10,
                 color=INK,
             )
         ax.set_yticks(y, [ASSET_LABELS[item] for item in order])
         ax.set_xlabel("Effect per 1 SD surprise")
-        ax.set_title(title, loc="left", fontsize=9, fontweight="bold")
+        ax.set_title(title, loc="left", fontsize=10, fontweight="bold")
         ax.grid(axis="x", color=LIGHT, lw=0.8)
     fig.suptitle(
         f"{SERIES_LABELS[series]} CPI: release day response across markets",
@@ -133,7 +135,7 @@ def cpi_forest(cpi: pd.DataFrame, series: str, number: int) -> Path:
         loc="lower center",
         ncol=2,
         frameon=False,
-        fontsize=7,
+        fontsize=9,
     )
     fig.subplots_adjust(bottom=0.23, top=0.82, wspace=0.55)
     return save(fig, f"{number:02d}_cpi_release_day_{series}_forest.png")
@@ -163,7 +165,7 @@ def significance_heatmap(cpi: pd.DataFrame) -> Path:
         rotation=25,
         ha="right",
     )
-    ax.set_yticks(range(len(row_order)), row_order, fontsize=7)
+    ax.set_yticks(range(len(row_order)), row_order, fontsize=9)
     for i in range(len(row_order)):
         for j in range(len(col_order)):
             q = pivot.iloc[i, j]
@@ -213,9 +215,9 @@ def persistence_chart(persistence: pd.DataFrame) -> Path:
             f"{int(sig)} of {int(tests)} significant",
             ha="center",
             va="bottom",
-            fontsize=8,
+            fontsize=10,
         )
-    ax.legend(frameon=False, loc="upper right", fontsize=7)
+    ax.legend(frameon=False, loc="upper right", fontsize=9)
     ax.grid(axis="y", color=LIGHT)
     return save(fig, "06_cpi_persistence.png")
 
