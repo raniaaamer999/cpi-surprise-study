@@ -27,16 +27,19 @@ END = date(2024, 1, 4)
 RETRIEVED_AT = datetime(2026, 9, 25, 16, 0, tzinfo=UTC)
 
 
+# Identifies missing prices in the downloaded example table.
 def _is_missing(value: object) -> bool:
     return isinstance(value, float) and math.isnan(value)
 
 
+# Creates a small FRED style CSV response for testing without network access.
 def _fred(series_id: str, rows: list[tuple[str, str]]) -> str:
     lines = [f"observation_date,{series_id}"]
     lines.extend(f"{day},{value}" for day, value in rows)
     return "\n".join(lines) + "\n"
 
 
+# Creates a timestamp in New York time for testing trading date conversion.
 def _ny_unix(day: str, hour: int = 9, minute: int = 30) -> int:
     parsed = date.fromisoformat(day)
     local = datetime(
@@ -50,6 +53,7 @@ def _ny_unix(day: str, hour: int = 9, minute: int = 30) -> int:
     return int(local.timestamp())
 
 
+# Builds a sample Yahoo response with controllable prices and metadata.
 def _yahoo_chart(
     bars: Sequence[tuple[int, Any]],
     *,
@@ -81,6 +85,7 @@ def _yahoo_chart(
     return json.dumps(payload)
 
 
+# Uses distinct regular and adjusted prices to reveal which field was chosen.
 def _sample_gld() -> str:
     days = ["2024-01-02", "2024-01-03", "2024-01-04"]
     closes = [180.25, 181.10, 181.40]
@@ -89,6 +94,7 @@ def _sample_gld() -> str:
     return _yahoo_chart(bars, adjusted=adjusted)
 
 
+# Provides example responses for all five instruments without network access.
 def _sample_bodies() -> dict[str, str]:
     days = [("2024-01-02", "1"), ("2024-01-03", "1"), ("2024-01-04", "1")]
     return {
@@ -109,6 +115,7 @@ def _sample_bodies() -> dict[str, str]:
     }
 
 
+# Identifies which instrument a simulated download request is asking for.
 def _body_key(request: httpx.Request) -> str:
     series_id = request.url.params.get("id")
     if isinstance(series_id, str) and series_id:
@@ -118,6 +125,7 @@ def _body_key(request: httpx.Request) -> str:
     return ""
 
 
+# Returns the example data with the response type expected from its provider.
 def _mocked_response(request: httpx.Request, bodies: dict[str, str]) -> httpx.Response:
     key = _body_key(request)
     body = bodies.get(key)
@@ -132,6 +140,7 @@ def _mocked_response(request: httpx.Request, bodies: dict[str, str]) -> httpx.Re
     return httpx.Response(200, text=body, headers={"content-type": content_type})
 
 
+# Runs the downloader against simulated responses and records the requested URLs.
 def _fetch(
     bodies: dict[str, str],
     start: date = START,
@@ -139,6 +148,7 @@ def _fetch(
 ) -> pd.DataFrame:
     urls: list[str] = []
 
+    # Returns a simulated provider response so this test does not need internet access.
     def handler(request: httpx.Request) -> httpx.Response:
         urls.append(str(request.url))
         return _mocked_response(request, bodies)
@@ -154,6 +164,7 @@ def _fetch(
     return frame
 
 
+# Selects one instrument and date from the downloaded table for checking.
 def _at(frame: pd.DataFrame, day: date, instrument: str) -> pd.Series:
     match = frame[
         (frame["observation_date"] == day) & (frame["instrument"] == instrument)
@@ -162,6 +173,7 @@ def _at(frame: pd.DataFrame, day: date, instrument: str) -> pd.Series:
     return match.iloc[0]
 
 
+# Checks labels, units, source details and the preference for adjusted GLD prices.
 def test_labels_proxy_and_preserves_yield_units() -> None:
     frame = _fetch(_sample_bodies())
 
@@ -216,6 +228,7 @@ def test_labels_proxy_and_preserves_yield_units() -> None:
     assert all(value == RETRIEVED_AT for value in frame["retrieved_at_utc"])
 
 
+# Checks that a gap in FRED data is not replaced with the previous observation.
 def test_missing_observations_are_not_forward_filled() -> None:
     bodies = _sample_bodies()
     bodies["DGS2"] = _fred(
@@ -232,6 +245,7 @@ def test_missing_observations_are_not_forward_filled() -> None:
     assert len(frame[frame["instrument"] == "us_2y_yield"]) == 3
 
 
+# Checks that text in a numeric market field causes a clear error.
 def test_rejects_malformed_values() -> None:
     bodies = _sample_bodies()
     bodies["DEXUSEU"] = _fred(
@@ -243,6 +257,7 @@ def test_rejects_malformed_values() -> None:
         _fetch(bodies)
 
 
+# Checks that unexpected CSV columns are rejected rather than misread as prices.
 def test_rejects_duplicate_dates() -> None:
     bodies = _sample_bodies()
     bodies["DGS10"] = _fred(
@@ -254,6 +269,7 @@ def test_rejects_duplicate_dates() -> None:
         _fetch(bodies)
 
 
+# Checks that FRED observations outside the requested dates are rejected.
 def test_rejects_unexpected_schema() -> None:
     bodies = _sample_bodies()
     bodies["SP500"] = "date,close\n2024-01-02,4700\n2024-01-03,4710\n"
@@ -262,6 +278,7 @@ def test_rejects_unexpected_schema() -> None:
         _fetch(bodies)
 
 
+# Checks that FRED observations outside the requested dates are rejected.
 def test_rejects_dates_outside_the_requested_range() -> None:
     bodies = _sample_bodies()
     bodies["DGS2"] = _fred(
@@ -273,6 +290,7 @@ def test_rejects_dates_outside_the_requested_range() -> None:
         _fetch(bodies, start=START, end=date(2024, 1, 3))
 
 
+# Checks that a failed download stops the run instead of leaving an incomplete table.
 def test_rejects_incomplete_source() -> None:
     bodies = _sample_bodies()
     del bodies["GLD"]
@@ -281,10 +299,12 @@ def test_rejects_incomplete_source() -> None:
         _fetch(bodies)
 
 
+# Checks that the download command saves all five instruments with the expected units.
 def test_command_writes_daily_market_csv(tmp_path: Path) -> None:
     output = tmp_path / "daily_market_data.csv"
     bodies = _sample_bodies()
 
+    # Returns a simulated provider response so this test does not need internet access.
     def handler(request: httpx.Request) -> httpx.Response:
         return _mocked_response(request, bodies)
 
@@ -308,6 +328,7 @@ def test_command_writes_daily_market_csv(tmp_path: Path) -> None:
     assert "reaction" not in output.read_text(encoding="utf-8")
 
 
+# Checks that regular closes are used when adjusted prices are absent.
 def test_gld_uses_close_when_adjusted_close_is_absent() -> None:
     bodies = _sample_bodies()
     days = ["2024-01-02", "2024-01-03", "2024-01-04"]
@@ -329,6 +350,7 @@ def test_gld_uses_close_when_adjusted_close_is_absent() -> None:
     assert last["value"] != pytest.approx(180.25)
 
 
+# Checks that one missing adjusted price falls back to that day's regular close.
 def test_gld_falls_back_to_close_for_a_missing_adjusted_bar() -> None:
     bodies = _sample_bodies()
     days = ["2024-01-02", "2024-01-03", "2024-01-04"]
@@ -350,6 +372,7 @@ def test_gld_falls_back_to_close_for_a_missing_adjusted_bar() -> None:
     assert last["price_field"] == "adjclose"
 
 
+# Checks that UTC timestamps map to the correct New York trading dates.
 def test_gld_timestamps_use_new_york_trading_dates() -> None:
     start = date(2024, 1, 1)
     end = date(2024, 1, 2)
@@ -377,6 +400,7 @@ def test_gld_timestamps_use_new_york_trading_dates() -> None:
     assert evening["price_field"] == "adjclose"
 
 
+# Checks rejection of browser pages, broken responses and invalid instrument data.
 def test_rejects_yahoo_html_and_malformed_chart() -> None:
     html = _sample_bodies()
     html["GLD"] = (
@@ -424,6 +448,7 @@ def test_rejects_yahoo_html_and_malformed_chart() -> None:
         _fetch(negative)
 
 
+# Checks that GLD observations outside the requested dates are rejected.
 def test_rejects_duplicate_gld_trading_dates() -> None:
     bodies = _sample_bodies()
     bodies["GLD"] = _yahoo_chart(
@@ -439,6 +464,7 @@ def test_rejects_duplicate_gld_trading_dates() -> None:
         _fetch(bodies)
 
 
+# Checks that GLD observations outside the requested trading dates are rejected.
 def test_rejects_gld_dates_outside_the_requested_range() -> None:
     bodies = _sample_bodies()
     for series_id in ("DGS2", "DGS10", "DEXUSEU", "SP500"):
@@ -460,6 +486,7 @@ def test_rejects_gld_dates_outside_the_requested_range() -> None:
         _fetch(bodies, start=START, end=date(2024, 1, 3))
 
 
+# Checks that the download command can show its help without a Python runtime warning.
 def test_module_entrypoint_does_not_warn() -> None:
     env = os.environ.copy()
     src = str(Path(__file__).resolve().parents[1] / "src")

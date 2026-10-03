@@ -22,8 +22,9 @@ class StatisticalAnalysisError(ValueError):
     pass
 
 
+# Estimates the surprise response for each CPI measure, instrument and window.
+# Applies one false discovery rate correction across all primary regressions.
 def estimate_surprise_reactions(events: pd.DataFrame) -> pd.DataFrame:
-    # Runs one regression for every CPI measure, market instrument, and window.
     frame = _prepare(events)
     rows: list[dict[str, object]] = []
     keys = ["series", "instrument", "asset_class", "reaction_unit"]
@@ -46,8 +47,9 @@ def estimate_surprise_reactions(events: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+# Tests whether the surprise response changed from 2020 onward.
+# Adjusts the tests of slope changes together to account for multiple comparisons.
 def estimate_regime_changes(events: pd.DataFrame) -> pd.DataFrame:
-    # Compares the relationships before 2020 with those from 2020 onward.
     frame = _prepare(events)
     frame["post_2020"] = (frame["release_date"] >= pd.Timestamp("2020-01-01")).astype(
         "float64"
@@ -75,8 +77,9 @@ def estimate_regime_changes(events: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+# Tests whether CPI surprises are related to additional movement after release day.
+# Subtracts the initial response to isolate later drift from the cumulative reactions.
 def estimate_persistence(events: pd.DataFrame) -> pd.DataFrame:
-    # Checks whether the first market reaction continues after the release day.
     frame = _prepare(events)
     frame["drift_after_eod_to_1d"] = frame["reaction_1d"] - frame["reaction_eod"]
     frame["drift_after_eod_to_5d"] = frame["reaction_5d"] - frame["reaction_eod"]
@@ -98,8 +101,9 @@ def estimate_persistence(events: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+# Repeats the main regressions using only releases where both Bloomberg tables agree.
+# Both the published CPI value and the survey forecast must match.
 def estimate_calendar_matched_sensitivity(events: pd.DataFrame) -> pd.DataFrame:
-    # Repeats the main tests only where both Bloomberg sources agree.
     required = {"actual_matches_calendar", "consensus_matches_calendar"}
     missing = required - set(events.columns)
     if missing:
@@ -114,6 +118,7 @@ def estimate_calendar_matched_sensitivity(events: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+# Runs and saves the main regressions and the three supporting analyses.
 def write_statistical_results(
     event_path: str | Path = DEFAULT_EVENT_DATASET,
     output_dir: str | Path = DEFAULT_RESULTS_DIR,
@@ -132,6 +137,8 @@ def write_statistical_results(
     return outputs
 
 
+# Checks the event table and converts dates and regression inputs to consistent types.
+# Invalid numbers become missing values that each regression excludes.
 def _prepare(events: pd.DataFrame) -> pd.DataFrame:
     required = {
         "release_date",
@@ -161,6 +168,8 @@ def _prepare(events: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+# Reads the Bloomberg agreement flags consistently after loading them from CSV.
+# Rejects unknown values rather than treating any nonempty text as true.
 def _as_boolean(values: pd.Series) -> pd.Series:
     normalized = values.astype(str).str.strip().str.casefold()
     if not normalized.isin(["true", "false"]).all():
@@ -168,8 +177,9 @@ def _as_boolean(values: pd.Series) -> pd.Series:
     return normalized.eq("true")
 
 
+# Fits the response to a standardized CPI surprise and estimates its uncertainty.
+# HC3 is the main estimate, while HAC checks dependence across nearby observations.
 def _simple_fit(x: pd.Series, y: pd.Series) -> dict[str, float | int]:
-    # Uses HC3 for the main uncertainty estimate and HAC as a second check.
     if len(x) < 20 or x.nunique() < 2:
         raise StatisticalAnalysisError(
             "A regression requires 20 rows and varying surprise"
@@ -195,8 +205,9 @@ def _simple_fit(x: pd.Series, y: pd.Series) -> dict[str, float | int]:
     }
 
 
+# Fits separate surprise slopes before and after 2020 within one regression.
+# The interaction coefficient measures how much the slope changes between the periods.
 def _regime_fit(sample: pd.DataFrame, window: str) -> dict[str, float | int]:
-    # Uses an interaction term to measure the change in the slope after 2020.
     if len(sample) < 40 or sample["post_2020"].nunique() != 2:
         raise StatisticalAnalysisError(
             "Regime regression needs both periods and 40 rows"
@@ -212,6 +223,7 @@ def _regime_fit(sample: pd.DataFrame, window: str) -> dict[str, float | int]:
     beta_pre = float(ordinary.params["surprise"])
     interaction = float(ordinary.params["interaction"])
     beta_post = beta_pre + interaction
+    # The later slope is a sum, so its uncertainty includes covariance between terms.
     post_variance = covariance[1, 1] + covariance[3, 3] + 2 * covariance[1, 3]
     post_se = math.sqrt(max(0.0, float(post_variance)))
     post_z = beta_post / post_se if post_se > 0 else math.nan
@@ -230,19 +242,22 @@ def _regime_fit(sample: pd.DataFrame, window: str) -> dict[str, float | int]:
     }
 
 
+# Adjusts the p values to account for testing many relationships at once.
+# Returns q values in the original order to keep them attached to the right results.
 def _benjamini_hochberg(p_values: pd.Series) -> pd.Series:
-    # Limits the share of false positives across the full group of tests.
     values = p_values.astype("float64").to_numpy()
     count = len(values)
     order = np.argsort(values)
     ranked = values[order]
     adjusted = ranked * count / np.arange(1, count + 1)
+    # Keep adjusted values ordered so a smaller p value cannot get a larger q value.
     adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
     result = np.empty(count, dtype="float64")
     result[order] = np.minimum(adjusted, 1.0)
     return pd.Series(result, index=p_values.index)
 
 
+# Reads the event dataset, saves the results and reports where they were written.
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--events", type=Path, default=DEFAULT_EVENT_DATASET)

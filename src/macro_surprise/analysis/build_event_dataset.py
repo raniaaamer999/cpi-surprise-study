@@ -16,11 +16,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_EVENT_DATASET = _REPO_ROOT / "data" / "private" / "cpi_event_reactions.csv"
 
 
+# Joins usable CPI surprises with the market reactions for each instrument.
+# Older releases help scale surprises even when their exact timing is unavailable.
 def build_event_dataset(
     cpi_path: str | Path = DEFAULT_OUTPUT,
     market_path: str | Path = DEFAULT_MARKET_DATA_PATH,
 ) -> pd.DataFrame:
-    # Uses older CPI releases for scaling but keeps market reactions from 2018 onward.
     cpi_file = Path(cpi_path)
     cpi = pd.read_csv(cpi_file) if cpi_file.is_file() else load_bloomberg_cpi()
     cpi["release_date"] = pd.to_datetime(cpi["release_date"], errors="raise").dt.date
@@ -51,12 +52,12 @@ def build_event_dataset(
     )
 
 
+# Builds and saves the event dataset in the private data folder by default.
 def write_event_dataset(
     cpi_path: str | Path = DEFAULT_OUTPUT,
     market_path: str | Path = DEFAULT_MARKET_DATA_PATH,
     output: str | Path = DEFAULT_EVENT_DATASET,
 ) -> pd.DataFrame:
-    # Saves the final event dataset in the private data folder.
     frame = build_event_dataset(cpi_path, market_path)
     destination = Path(output)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -64,6 +65,7 @@ def write_event_dataset(
     return frame
 
 
+# Reads the input paths, builds the dataset and reports its size.
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cpi", type=Path, default=DEFAULT_OUTPUT)

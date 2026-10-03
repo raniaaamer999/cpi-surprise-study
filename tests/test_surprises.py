@@ -10,10 +10,12 @@ import pytest
 from macro_surprise.analysis.surprises import add_cpi_surprises
 
 
+# Identifies missing scores when a surprise cannot yet be standardized.
 def _is_missing(value: object) -> bool:
     return isinstance(value, float) and math.isnan(value)
 
 
+# Builds example CPI records with the fields needed by the surprise calculation.
 def _releases(
     entries: list[tuple[date, str, float, float]],
 ) -> pd.DataFrame:
@@ -44,6 +46,7 @@ def _releases(
     return pd.DataFrame(rows)
 
 
+# Creates a monthly CPI history with chosen surprises so the expected scaling is known.
 def _monthly(
     series: str,
     surprises: list[float],
@@ -59,12 +62,14 @@ def _monthly(
     return _releases(entries)
 
 
+# Selects one example release by date and CPI series for a precise result check.
 def _at(frame: pd.DataFrame, release_date: date, series: str) -> pd.Series:
     match = frame[(frame["release_date"] == release_date) & (frame["series"] == series)]
     assert len(match) == 1
     return match.iloc[0]
 
 
+# Checks that surprises use actuals and forecasts without changing the input.
 def test_raw_surprise_is_actual_minus_consensus() -> None:
     source = _releases(
         [
@@ -82,6 +87,7 @@ def test_raw_surprise_is_actual_minus_consensus() -> None:
     assert result["raw_surprise"].tolist() == pytest.approx([0.1, -0.3])
 
 
+# Checks that interleaved headline and core releases retain separate histories.
 def test_series_histories_stay_separate() -> None:
     headline = _monthly("headline_mom", [1.0, 3.0, 5.0])
     core = _monthly("core_mom", [10.0, 10.0, 10.0])
@@ -102,6 +108,7 @@ def test_series_histories_stay_separate() -> None:
     assert core_row["historical_surprise_std"] == 0
 
 
+# Checks that the current surprise is excluded from its historical scaling.
 def test_current_event_is_excluded_from_its_historical_standard_deviation() -> None:
     surprises = [float(value) for value in range(1, 13)] + [100.0]
     source = _monthly("headline_mom", surprises).iloc[::-1].reset_index(drop=True)
@@ -122,6 +129,7 @@ def test_current_event_is_excluded_from_its_historical_standard_deviation() -> N
     assert latest["standardized_surprise"] == pytest.approx(100.0 / history_only)
 
 
+# Checks that adding a future release cannot change an earlier standardized score.
 def test_future_event_does_not_change_an_earlier_standardized_surprise() -> None:
     history = _monthly("headline_mom", [float(value) for value in range(1, 14)])
     before = _at(
@@ -153,6 +161,7 @@ def test_future_event_does_not_change_an_earlier_standardized_surprise() -> None
     )
 
 
+# Checks that standardization starts only after twelve earlier releases are available.
 def test_standardized_surprise_is_missing_until_twelve_earlier_observations() -> None:
     twelve = add_cpi_surprises(
         _monthly("headline_mom", [float(value) for value in range(1, 13)])
@@ -174,6 +183,7 @@ def test_standardized_surprise_is_missing_until_twelve_earlier_observations() ->
     assert not _is_missing(first_ready["standardized_surprise"])
 
 
+# Checks that a constant history produces a missing score rather than infinity.
 def test_zero_historical_standard_deviation_has_missing_standardized_surprise() -> None:
     result = add_cpi_surprises(_monthly("core_yoy", [0.1] * 12 + [0.5]))
     row = _at(result, date(2011, 1, 15), "core_yoy")
@@ -185,6 +195,7 @@ def test_zero_historical_standard_deviation_has_missing_standardized_surprise() 
     assert not math.isinf(row["standardized_surprise"])
 
 
+# Checks that older releases contribute to scaling when only dates are available.
 def test_release_date_orders_history_when_old_timestamps_are_missing() -> None:
     source = _monthly("headline_mom", [float(value) for value in range(1, 14)])
     source.loc[source.index[:12], "release_timestamp_utc"] = pd.NaT

@@ -8,6 +8,7 @@ import pytest
 from macro_surprise.analysis.reactions import ReactionError, calculate_daily_reactions
 
 
+# Creates one example CPI release with a known standardized surprise.
 def _events() -> pd.DataFrame:
     return pd.DataFrame(
         [
@@ -20,6 +21,7 @@ def _events() -> pd.DataFrame:
     )
 
 
+# Creates market values with gaps for a weekend and holiday to test session counting.
 def _market() -> pd.DataFrame:
     dates = pd.to_datetime(
         [
@@ -49,6 +51,7 @@ def _market() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# Checks that yield reactions use basis points and share the same starting observation.
 def test_yield_reactions_are_cumulative_basis_point_changes() -> None:
     result = calculate_daily_reactions(_events(), _market())
     row = result[result["instrument"] == "us_2y_yield"].iloc[0]
@@ -60,6 +63,7 @@ def test_yield_reactions_are_cumulative_basis_point_changes() -> None:
     assert row["plus_5_session_date"] == date(2024, 1, 19)
 
 
+# Checks that price returns share the same starting value before the release.
 def test_price_reactions_are_cumulative_percentage_returns() -> None:
     result = calculate_daily_reactions(_events(), _market())
     row = result[result["instrument"] == "sp500"].iloc[0]
@@ -70,6 +74,7 @@ def test_price_reactions_are_cumulative_percentage_returns() -> None:
     assert row["reaction_unit"] == "percent_return"
 
 
+# Checks that a missing release day stays missing even when a later market value exists.
 def test_missing_release_day_is_not_replaced_with_next_session() -> None:
     market = _market()
     market = market[
@@ -87,6 +92,7 @@ def test_missing_release_day_is_not_replaced_with_next_session() -> None:
     assert row["reaction_1d"] == pytest.approx(2.0)
 
 
+# Checks that duplicate market observations cannot enter the reaction calculation.
 def test_duplicate_instrument_date_is_rejected() -> None:
     market = pd.concat([_market(), _market().iloc[[0]]], ignore_index=True)
 

@@ -46,8 +46,9 @@ class BloombergCpiError(ValueError):
     pass
 
 
+# Loads all four CPI histories and attaches the Bloomberg calendar information.
+# Keeps older history for scaling and rejects duplicate releases within a series.
 def load_bloomberg_cpi(path: str | Path | None = None) -> pd.DataFrame:
-    # Keeps the older CPI history because it is needed to scale later surprises.
     workbook = DEFAULT_WORKBOOK if path is None else Path(path)
     if not workbook.is_file():
         raise BloombergCpiError(f"Bloomberg CPI workbook not found: {workbook}")
@@ -71,6 +72,7 @@ def load_bloomberg_cpi(path: str | Path | None = None) -> pd.DataFrame:
     return result.loc[:, list(OUTPUT_COLUMNS)]
 
 
+# Requires all four CPI history sheets and at least one release calendar sheet.
 def _require_sheets(sheet_names: list[str]) -> None:
     missing = set(SERIES_TICKERS) - set(sheet_names)
     calendar_sheets = [name for name in sheet_names if name.startswith("release_time_")]
@@ -80,8 +82,9 @@ def _require_sheets(sheet_names: list[str]) -> None:
         raise BloombergCpiError("No release_time_YYYY calendar sheets found")
 
 
+# Combines yearly calendars and keeps the four CPI measures used in the study.
+# Drops entries without usable dates or times and rejects duplicate announcements.
 def _load_calendar(workbook: Path, sheet_names: list[str]) -> pd.DataFrame:
-    # Combines the yearly calendar sheets and keeps only the four CPI series.
     sheets = sorted(name for name in sheet_names if name.startswith("release_time_"))
     pieces: list[pd.DataFrame] = []
     required = {
@@ -119,13 +122,14 @@ def _load_calendar(workbook: Path, sheet_names: list[str]) -> pd.DataFrame:
     return calendar
 
 
+# Reads one CPI history from Bloomberg's alternating release and metadata rows.
+# Adds calendar comparisons while preserving the historical actual and forecast.
 def _load_series(
     workbook: Path,
     series: str,
     ticker: str,
     calendar: pd.DataFrame,
 ) -> pd.DataFrame:
-    # Reads the alternating Bloomberg rows and keeps rows with an actual and forecast.
     raw = pd.read_excel(workbook, sheet_name=series, header=None)
     if raw.shape[1] < 5:
         raise BloombergCpiError(f"Sheet {series} must contain at least five columns")
@@ -160,6 +164,7 @@ def _load_series(
             "survey_median": "calendar_consensus",
         }
     )
+    # Keep unmatched historical releases because they still help scale later surprises.
     rows = rows.merge(
         selected_calendar,
         on="release_date",
@@ -177,6 +182,8 @@ def _load_series(
     return rows
 
 
+# Reads the different time formats that can appear in the Bloomberg workbook.
+# Returns a missing value when the release time cannot be interpreted.
 def _parse_clock(value: object) -> time | None:
     if isinstance(value, time):
         return value.replace(tzinfo=None)
@@ -193,8 +200,8 @@ def _parse_clock(value: object) -> time | None:
     return None
 
 
+# Converts the local release date and time to UTC using New York timezone rules.
 def _timestamp_or_missing(row: pd.Series) -> datetime | pd.NaT:
-    # Converts the New York release time to UTC when an exact time is available.
     release_time = row["release_time_et"]
     if not isinstance(release_time, time):
         return pd.NaT
@@ -202,6 +209,8 @@ def _timestamp_or_missing(row: pd.Series) -> datetime | pd.NaT:
     return local.astimezone(UTC)
 
 
+# Checks whether two Bloomberg values agree within a small rounding tolerance.
+# A missing value on either side stays unknown rather than counting as a disagreement.
 def _close_or_missing(left: pd.Series, right: pd.Series) -> pd.Series:
     available = left.notna() & right.notna()
     result = pd.Series(pd.NA, index=left.index, dtype="boolean")
@@ -209,11 +218,11 @@ def _close_or_missing(left: pd.Series, right: pd.Series) -> pd.Series:
     return result
 
 
+# Cleans the workbook and saves its event records in the private folder by default.
 def write_clean_bloomberg_cpi(
     workbook: str | Path | None = None,
     output: str | Path | None = None,
 ) -> pd.DataFrame:
-    # Saves the cleaned event rows in the private data folder.
     destination = DEFAULT_OUTPUT if output is None else Path(output)
     frame = load_bloomberg_cpi(workbook)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -221,6 +230,7 @@ def write_clean_bloomberg_cpi(
     return frame
 
 
+# Reads the workbook and output paths, then saves the cleaned CPI records.
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workbook", type=Path, default=DEFAULT_WORKBOOK)

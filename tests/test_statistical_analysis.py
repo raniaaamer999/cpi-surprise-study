@@ -14,6 +14,8 @@ from macro_surprise.analysis.statistical_analysis import (
 )
 
 
+# Creates example reactions with a known slope change in 2020 and known later drift.
+# Uses controlled relationships to check the calculations without real market data.
 def _events() -> pd.DataFrame:
     dates = pd.date_range("2018-01-01", periods=72, freq="MS")
     rows = []
@@ -40,6 +42,7 @@ def _events() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# Checks that the regression detects the positive relationship in the example data.
 def test_primary_regressions_recover_positive_relationship() -> None:
     result = estimate_surprise_reactions(_events())
     eod = result[result["window"] == "reaction_eod"].iloc[0]
@@ -52,6 +55,7 @@ def test_primary_regressions_recover_positive_relationship() -> None:
     assert bool(eod["significant_5pct_fdr"])
 
 
+# Checks that the model recovers the stronger slope added after 2020.
 def test_regime_interaction_detects_stronger_post_2020_slope() -> None:
     result = estimate_regime_changes(_events())
     eod = result[result["window"] == "reaction_eod"].iloc[0]
@@ -63,6 +67,7 @@ def test_regime_interaction_detects_stronger_post_2020_slope() -> None:
     assert eod["interaction_p_value_hc3"] < 0.001
 
 
+# Checks that persistence measures later drift rather than the cumulative reaction.
 def test_persistence_measures_post_event_drift() -> None:
     result = estimate_persistence(_events())
     five_day = result[result["drift_window"] == "drift_after_eod_to_5d"].iloc[0]
@@ -71,6 +76,7 @@ def test_persistence_measures_post_event_drift() -> None:
     assert five_day["p_value_hc3"] < 0.001
 
 
+# Checks that repeated event and instrument rows cannot inflate the regression sample.
 def test_duplicate_event_asset_rows_are_rejected() -> None:
     events = pd.concat([_events(), _events().iloc[[0]]], ignore_index=True)
 
@@ -78,6 +84,7 @@ def test_duplicate_event_asset_rows_are_rejected() -> None:
         estimate_surprise_reactions(events)
 
 
+# Checks that the Bloomberg agreement analysis reduces the sample to matching records.
 def test_calendar_sensitivity_uses_only_matching_rows() -> None:
     result = estimate_calendar_matched_sensitivity(_events())
 

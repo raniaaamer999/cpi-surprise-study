@@ -42,6 +42,7 @@ WINDOW_LABELS = {
 }
 
 
+# Sets the fonts and appearance shared by all six research charts.
 def style() -> None:
     plt.rcParams.update(
         {
@@ -60,6 +61,7 @@ def style() -> None:
     )
 
 
+# Saves a chart as a PNG and closes the figure to free its plotting resources.
 def save(fig: Figure, name: str) -> Path:
     path = CHARTS / name
     fig.savefig(path, dpi=220, bbox_inches="tight", facecolor="white")
@@ -67,8 +69,9 @@ def save(fig: Figure, name: str) -> Path:
     return path
 
 
+# Plots the release day estimates and confidence intervals for one CPI measure.
+# Treasury yields use a separate panel because their responses are in basis points.
 def cpi_forest(cpi: pd.DataFrame, series: str, number: int) -> Path:
-    # Shows the release day response for one of the four CPI measures.
     frame = cpi[(cpi.series == series) & (cpi.window == "reaction_eod")].copy()
     panels = (
         (["us_2y_yield", "us_10y_yield"], "Rates (basis points)", " bp"),
@@ -141,8 +144,9 @@ def cpi_forest(cpi: pd.DataFrame, series: str, number: int) -> Path:
     return save(fig, f"{number:02d}_cpi_release_day_{series}_forest.png")
 
 
+# Shows which CPI relationships remain significant after adjusting for multiple tests.
+# Each cell represents one CPI measure, market instrument and reaction window.
 def significance_heatmap(cpi: pd.DataFrame) -> Path:
-    # Shows which results remain significant after the correction for many tests.
     frame = cpi.copy()
     frame["row"] = (
         frame.series.map(SERIES_LABELS) + ": " + frame.window.map(WINDOW_LABELS)
@@ -155,6 +159,7 @@ def significance_heatmap(cpi: pd.DataFrame) -> Path:
     ]
     col_order = list(ASSET_LABELS)
     pivot = pivot.loc[row_order, col_order]
+    # The log scale highlights small q values without changing significance decisions.
     score = -np.log10(pivot.clip(lower=1e-4))
     cmap = LinearSegmentedColormap.from_list("sig", ["#e9eef2", "#8bded6", "#137c79"])
     fig, ax = plt.subplots(figsize=(7.2, 4.2))
@@ -188,8 +193,9 @@ def significance_heatmap(cpi: pd.DataFrame) -> Path:
     return save(fig, "05_cpi_significance_heatmap.png")
 
 
+# Summarizes the tests for additional market movement after release day.
+# Bars show the smallest adjusted q value per period, not the size of the movement.
 def persistence_chart(persistence: pd.DataFrame) -> Path:
-    # Summarizes whether the release day reaction continues in later sessions.
     order = ["drift_after_eod_to_1d", "drift_after_eod_to_5d"]
     summary = persistence.groupby("drift_window").agg(
         smallest_q=("q_value_bh", "min"),
@@ -222,6 +228,7 @@ def persistence_chart(persistence: pd.DataFrame) -> Path:
     return save(fig, "06_cpi_persistence.png")
 
 
+# Reads the saved regression results and creates the six aggregate research charts.
 def main() -> None:
     style()
     CHARTS.mkdir(parents=True, exist_ok=True)

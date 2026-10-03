@@ -17,8 +17,9 @@ SURPRISE_COLUMNS = (
 _INPUT_COLUMNS = ("series", "actual", "consensus")
 
 
+# Calculates raw and standardized CPI surprises while preserving the input row order.
+# Each CPI series uses its own earlier releases to set the scale.
 def add_cpi_surprises(releases: pd.DataFrame) -> pd.DataFrame:
-    # Keeps the original row order while calculating each CPI series separately.
     frame = releases.copy()
     _require_columns(frame)
     if frame.empty:
@@ -33,6 +34,7 @@ def add_cpi_surprises(releases: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+# Checks that the CPI series, published values and survey forecasts are available.
 def _require_columns(frame: pd.DataFrame) -> None:
     missing = [column for column in _INPUT_COLUMNS if column not in frame.columns]
     if missing:
@@ -43,6 +45,7 @@ def _require_columns(frame: pd.DataFrame) -> None:
         )
 
 
+# Orders releases by date, using the timestamp if no date column exists.
 def _order_column(frame: pd.DataFrame) -> str:
     if "release_date" in frame.columns:
         return "release_date"
@@ -53,6 +56,7 @@ def _order_column(frame: pd.DataFrame) -> str:
     )
 
 
+# Rejects missing dates and duplicates that would make release ordering ambiguous.
 def _require_unique_order(ordered: pd.DataFrame, order_column: str) -> None:
     if ordered[order_column].isna().any():
         raise ValueError(f"{order_column} must not be missing")
@@ -64,6 +68,7 @@ def _require_unique_order(ordered: pd.DataFrame, order_column: str) -> None:
         )
 
 
+# Returns the expected surprise columns even when there are no releases to process.
 def _with_empty_surprise_columns(frame: pd.DataFrame) -> pd.DataFrame:
     frame["raw_surprise"] = pd.Series(index=frame.index, dtype="float64")
     frame["historical_surprise_count"] = pd.Series(index=frame.index, dtype="int64")
@@ -72,6 +77,7 @@ def _with_empty_surprise_columns(frame: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+# Keeps CPI measures separate so headline and core histories cannot affect each other.
 def _surprises_by_series(ordered: pd.DataFrame) -> pd.DataFrame:
     pieces = [
         _series_surprises(group) for _, group in ordered.groupby("series", sort=False)
@@ -79,6 +85,8 @@ def _surprises_by_series(ordered: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(pieces)
 
 
+# Builds the surprise history for one CPI measure in release order.
+# The current release is excluded from the history used to scale its surprise.
 def _series_surprises(group: pd.DataFrame) -> pd.DataFrame:
     raw_values = [
         _raw_surprise(actual, consensus)
@@ -109,6 +117,7 @@ def _series_surprises(group: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+# Subtracts the forecast from the published CPI value and rejects invalid numbers.
 def _raw_surprise(actual: object, consensus: object) -> float:
     try:
         surprise = float(actual) - float(consensus)  # type: ignore[arg-type]
@@ -119,6 +128,7 @@ def _raw_surprise(actual: object, consensus: object) -> float:
     return surprise
 
 
+# Measures the spread of earlier surprises using the sample standard deviation.
 def _sample_std(history: list[float]) -> float:
     # Needs at least two earlier surprises to calculate the sample spread.
     if len(history) < 2:
@@ -126,6 +136,8 @@ def _sample_std(history: list[float]) -> float:
     return statistics.stdev(history)
 
 
+# Requires twelve earlier observations with a positive spread before scaling.
+# Leaves the score missing when the history cannot support standardization.
 def _standardized_surprise(surprise: float, count: int, std: float) -> float:
     if count >= MIN_EARLIER_SURPRISES and math.isfinite(std) and std > 0:
         return surprise / std

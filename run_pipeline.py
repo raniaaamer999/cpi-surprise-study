@@ -19,14 +19,17 @@ class Step:
     command: tuple[str, ...]
 
 
+# Builds a module command using the same Python environment as this runner.
 def _python_module(module: str, *arguments: str) -> tuple[str, ...]:
     return (sys.executable, "-m", module, *arguments)
 
 
+# Builds a script command using the same Python environment as this runner.
 def _python_script(path: str, *arguments: str) -> tuple[str, ...]:
     return (sys.executable, path, *arguments)
 
 
+# Lists the private workbook and saved market data needed to rebuild the study.
 def _required_inputs() -> tuple[Path, ...]:
     return (
         ROOT / "data/private/cpi_bloomberg_private.xlsx",
@@ -34,8 +37,9 @@ def _required_inputs() -> tuple[Path, ...]:
     )
 
 
+# Checks that the required inputs exist before starting the pipeline.
+# The saved market file is optional when a fresh download has been requested.
 def _check_inputs(*, refresh_public_data: bool) -> None:
-    # Checks that the files needed for an offline run are available.
     required = list(_required_inputs())
     if refresh_public_data:
         required = [path for path in required if "data/external" not in str(path)]
@@ -45,8 +49,8 @@ def _check_inputs(*, refresh_public_data: bool) -> None:
         raise SystemExit(f"Missing required input files:\n{rendered}")
 
 
+# Puts cleaning, event matching, analysis, charts and tests in the required order.
 def _build_steps(args: argparse.Namespace) -> list[Step]:
-    # Builds the commands in the order needed to recreate the study.
     steps: list[Step] = []
     if args.refresh_public_data:
         steps.append(
@@ -89,6 +93,8 @@ def _build_steps(args: argparse.Namespace) -> list[Step]:
     return steps
 
 
+# Runs one step and stops on failure so later steps cannot use incomplete results.
+# In preview mode, it only prints the command.
 def _run_step(step: Step, number: int, total: int, *, dry_run: bool) -> None:
     # Adds the source folder to Python before running each command.
     print(f"\n[{number}/{total}] {step.name}", flush=True)
@@ -116,6 +122,7 @@ def _run_step(step: Step, number: int, total: int, *, dry_run: bool) -> None:
         )
 
 
+# Reads the pipeline options and checks that the requested dates are valid.
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Rebuild the complete CPI research project in order."
@@ -146,6 +153,7 @@ def _parse_args() -> argparse.Namespace:
     return args
 
 
+# Coordinates the study and reports whether the run completed or previewed its steps.
 def main() -> None:
     args = _parse_args()
     _check_inputs(refresh_public_data=args.refresh_public_data)

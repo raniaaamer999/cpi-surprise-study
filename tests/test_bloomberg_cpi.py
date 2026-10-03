@@ -13,6 +13,8 @@ from macro_surprise.data.bloomberg_cpi import (
 )
 
 
+# Creates a small example Bloomberg workbook without using licensed records.
+# Can add a duplicate calendar entry to exercise the validation check.
 def _write_workbook(path: Path, *, duplicate_calendar: bool = False) -> None:
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
         for series in SERIES_TICKERS:
@@ -45,6 +47,7 @@ def _write_workbook(path: Path, *, duplicate_calendar: bool = False) -> None:
         )
 
 
+# Checks that alternating Bloomberg rows are read and matched to the release time.
 def test_loads_interleaved_bdh_rows_and_attaches_release_time(tmp_path: Path) -> None:
     path = tmp_path / "cpi.xlsx"
     _write_workbook(path)
@@ -66,6 +69,7 @@ def test_loads_interleaved_bdh_rows_and_attaches_release_time(tmp_path: Path) ->
     assert bool(row["consensus_matches_calendar"])
 
 
+# Checks that duplicate calendar entries stop the import.
 def test_rejects_duplicate_calendar_ticker_date(tmp_path: Path) -> None:
     path = tmp_path / "cpi.xlsx"
     _write_workbook(path, duplicate_calendar=True)
@@ -74,6 +78,7 @@ def test_rejects_duplicate_calendar_ticker_date(tmp_path: Path) -> None:
         load_bloomberg_cpi(path)
 
 
+# Checks that an incomplete workbook produces an error before any analysis begins.
 def test_rejects_missing_required_sheet(tmp_path: Path) -> None:
     path = tmp_path / "cpi.xlsx"
     with pd.ExcelWriter(path, engine="openpyxl") as writer:

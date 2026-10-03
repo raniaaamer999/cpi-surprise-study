@@ -35,11 +35,12 @@ class ReactionError(ValueError):
     pass
 
 
+# Matches each CPI release with every instrument and calculates three reaction windows.
+# Session counts use available market observations rather than calendar days.
 def calculate_daily_reactions(
     events: pd.DataFrame,
     market: pd.DataFrame,
 ) -> pd.DataFrame:
-    # Makes one result row for every CPI measure and market instrument.
     _require_columns(events, EVENT_COLUMNS, "events")
     _require_columns(market, MARKET_COLUMNS, "market")
     event_frame = events.copy()
@@ -78,18 +79,20 @@ def calculate_daily_reactions(
     return pd.DataFrame.from_records(rows, columns=list(REACTION_COLUMNS))
 
 
+# Finds the starting value and the three later values for one event and instrument.
+# All windows start at the last valid observation before the release.
 def _one_reaction(
     event: dict[str, object],
     levels: pd.DataFrame,
     instrument_row: dict[str, object],
     release_date: date,
 ) -> dict[str, object]:
-    # Uses the last valid price before the release as the common starting value.
     before = levels[levels["observation_date"] < release_date]
     on_date = levels[levels["observation_date"] == release_date]
     after = levels[levels["observation_date"] > release_date]
     baseline = before.iloc[-1] if not before.empty else None
     event_session = on_date.iloc[0] if not on_date.empty else None
+    # Count available sessions after the release, skipping holidays and missing values.
     plus_1 = after.iloc[0] if len(after) >= 1 else None
     plus_5 = after.iloc[4] if len(after) >= 5 else None
     instrument = str(instrument_row["instrument"])
@@ -116,6 +119,8 @@ def _one_reaction(
     }
 
 
+# Converts a pair of market values into a yield change or a percentage return.
+# Missing observations stay missing rather than appearing to show no movement.
 def _reaction(
     baseline: pd.Series | None,
     endpoint: pd.Series | None,
@@ -127,16 +132,19 @@ def _reaction(
     start = float(baseline["value"])
     end = float(endpoint["value"])
     if instrument in RATE_INSTRUMENTS:
+        # A change of one percentage point in a yield equals one hundred basis points.
         return (end - start) * 100.0
     if start <= 0:
         raise ReactionError(f"{instrument} has non-positive baseline value")
     return (end / start - 1.0) * 100.0
 
 
+# Retrieves a date or value from a market observation, leaving unmatched values empty.
 def _field(row: pd.Series | None, column: str) -> object | None:
     return None if row is None else row[column]
 
 
+# Checks that the event or market table contains the fields needed for matching.
 def _require_columns(
     frame: pd.DataFrame, required: tuple[str, ...], label: str
 ) -> None:
@@ -145,6 +153,7 @@ def _require_columns(
         raise ReactionError(f"{label} missing columns: {', '.join(missing)}")
 
 
+# Rejects incomplete or duplicate CPI events before they can enter the reaction dataset.
 def _validate_events(events: pd.DataFrame) -> None:
     if events[list(EVENT_COLUMNS)].isna().any().any():
         raise ReactionError("events contain missing required values")
@@ -152,6 +161,8 @@ def _validate_events(events: pd.DataFrame) -> None:
         raise ReactionError("events contain duplicate release_date and series rows")
 
 
+# Checks that market dates and instrument labels are complete and consistent.
+# Duplicate observations are rejected because session matching would be ambiguous.
 def _validate_market(market: pd.DataFrame) -> None:
     key_columns = ["observation_date", "instrument", "asset_class"]
     if market[key_columns].isna().any().any():

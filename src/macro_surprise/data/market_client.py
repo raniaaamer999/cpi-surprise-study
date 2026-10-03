@@ -125,6 +125,8 @@ _INSTRUMENTS_BY_NAME = {
 }
 
 
+# Downloads daily observations for all five instruments over the requested dates.
+# Preserves missing source values and records when the data was retrieved.
 def fetch_daily_market_data(
     start: date,
     end: date,
@@ -132,7 +134,6 @@ def fetch_daily_market_data(
     client: httpx.Client | None = None,
     retrieved_at: datetime | None = None,
 ) -> pd.DataFrame:
-    # Downloads all five instruments and keeps missing source values empty.
     start_date = _require_date(start, "start")
     end_date = _require_date(end, "end")
     _validate_range(start_date, end_date)
@@ -151,11 +152,11 @@ def fetch_daily_market_data(
     return _as_frame(rows)
 
 
+# Validates the market table before saving it with the columns expected by the analysis.
 def save_daily_market_data(
     frame: pd.DataFrame,
     path: str | Path | None = None,
 ) -> Path:
-    # Checks the table again before saving it to the external data folder.
     output = DEFAULT_MARKET_DATA_PATH if path is None else Path(path)
     _require_market_table(frame)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -163,8 +164,8 @@ def save_daily_market_data(
     return output
 
 
+# Downloads and saves the requested market data, with a clear error if a source fails.
 def main(argv: list[str] | None = None, *, client: httpx.Client | None = None) -> None:
-    # Handles the command line inputs and saves the finished market file.
     args = _parse_args(argv)
     output = Path(args.output)
     try:
@@ -179,6 +180,7 @@ def main(argv: list[str] | None = None, *, client: httpx.Client | None = None) -
     print(f"Wrote {len(frame)} daily market rows to {saved}")
 
 
+# Reads the date range and destination for the public market data download.
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -207,6 +209,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+# Reports a formatting error if a command line date cannot be interpreted.
 def _cli_date(text: str) -> date:
     try:
         return datetime.strptime(text, "%Y-%m-%d").date()
@@ -214,12 +217,14 @@ def _cli_date(text: str) -> date:
         raise argparse.ArgumentTypeError(f"{text!r} is not a YYYY-MM-DD date") from exc
 
 
+# Requires a calendar date so a time cannot silently change the download boundaries.
 def _require_date(value: object, label: str) -> date:
     if isinstance(value, datetime) or not isinstance(value, date):
         raise MarketDataError(f"{label} must be a calendar date")
     return value
 
 
+# Rejects reversed date ranges and dates outside the supported download limits.
 def _validate_range(start: date, end: date) -> None:
     if start > end:
         raise MarketDataError("start must not be after end")
@@ -230,6 +235,7 @@ def _validate_range(start: date, end: date) -> None:
         raise MarketDataError(f"end must be {latest.isoformat()} or earlier")
 
 
+# Records retrieval time in UTC and rejects timestamps without timezone information.
 def _as_utc(retrieved_at: datetime | None) -> datetime:
     stamp = datetime.now(UTC) if retrieved_at is None else retrieved_at
     if stamp.tzinfo is None or stamp.utcoffset() is None:
@@ -237,6 +243,8 @@ def _as_utc(retrieved_at: datetime | None) -> datetime:
     return stamp.astimezone(UTC)
 
 
+# Downloads one instrument using the parser for its provider.
+# An empty response is treated as a failed download rather than a valid dataset.
 def _download_instrument(
     client: httpx.Client,
     spec: _Instrument,
@@ -244,7 +252,6 @@ def _download_instrument(
     end: date,
     retrieved_at: datetime,
 ) -> list[dict[str, object]]:
-    # Sends each instrument to the parser for its own data source.
     if spec.kind == "fred":
         text = _get_text(client, _fred_url(spec.provider_id, start, end))
         rows = _parse_fred(text, spec, start, end, retrieved_at)
@@ -264,12 +271,15 @@ def _download_instrument(
     return rows
 
 
+# Builds the FRED CSV request for one series and the requested date range.
 def _fred_url(series_id: str, start: date, end: date) -> str:
     return (
         f"{FRED_CSV_URL}?id={series_id}&cosd={start.isoformat()}&coed={end.isoformat()}"
     )
 
 
+# Builds the Yahoo request for daily GLD prices with adjusted closes included.
+# The ending boundary is the following midnight because Yahoo excludes that boundary.
 def _yahoo_url(start: date, end: date) -> str:
     period_start = _new_york_midnight(start)
     period_end = _new_york_midnight(end + timedelta(days=1))
@@ -279,18 +289,20 @@ def _yahoo_url(start: date, end: date) -> str:
     )
 
 
+# Converts a local calendar day to the timestamp used for Yahoo request boundaries.
 def _new_york_midnight(day: date) -> int:
     local = datetime.combine(day, time.min, tzinfo=_NEW_YORK)
     return int(local.timestamp())
 
 
+# Fetches a provider response and checks its status and final destination.
+# Rejects unexpected hosts and unusable responses before they reach the data parsers.
 def _get_text(
     client: httpx.Client,
     url: str,
     *,
     accept: str = "text/csv",
 ) -> str:
-    # Accepts responses only from the data providers used by this project.
     try:
         response = client.get(
             url,
@@ -314,6 +326,7 @@ def _get_text(
     return response.text
 
 
+# Detects browser verification pages that Yahoo may return instead of price data.
 def _reject_html(response: httpx.Response) -> None:
     content_type = response.headers.get("content-type", "")
     body = response.text.lstrip()
@@ -321,6 +334,8 @@ def _reject_html(response: httpx.Response) -> None:
         raise MarketDataError("Yahoo Finance returned HTML instead of GLD chart JSON")
 
 
+# Converts a FRED CSV response into dated market observations.
+# Checks the series, values and dates while preserving gaps in the source data.
 def _parse_fred(
     text: str,
     spec: _Instrument,
@@ -328,7 +343,6 @@ def _parse_fred(
     end: date,
     retrieved_at: datetime,
 ) -> list[dict[str, object]]:
-    # Keeps FRED missing values empty instead of filling them with older values.
     header, records = _csv_table(text, spec.provider_id)
     expected = ["observation_date", spec.provider_id]
     if header != expected:
@@ -365,6 +379,8 @@ def _parse_fred(
     return rows
 
 
+# Converts the GLD chart response into daily market observations.
+# Records which price field was used for each date so any fallback remains visible.
 def _parse_yahoo(
     text: str,
     spec: _Instrument,
@@ -392,6 +408,7 @@ def _parse_yahoo(
     return rows
 
 
+# Checks that Yahoo returned one usable GLD result before reading its prices.
 def _yahoo_chart(text: str) -> dict[str, object]:
     try:
         payload = json.loads(text)
@@ -421,6 +438,7 @@ def _yahoo_chart(text: str) -> dict[str, object]:
     return item
 
 
+# Checks that the response is for GLD in US dollars with the expected timezone.
 def _require_gld_meta(meta: object) -> None:
     if not isinstance(meta, dict):
         raise MarketDataError("Yahoo Finance GLD response did not include meta")
@@ -441,6 +459,7 @@ def _require_gld_meta(meta: object) -> None:
         )
 
 
+# Reads the observation timestamps from the Yahoo result and rejects a missing list.
 def _yahoo_timestamps(chart: dict[str, object]) -> list[object]:
     timestamps = chart.get("timestamp")
     if not isinstance(timestamps, list):
@@ -448,6 +467,7 @@ def _yahoo_timestamps(chart: dict[str, object]) -> list[object]:
     return list(timestamps)
 
 
+# Reads the regular closing prices and checks that they align with the timestamps.
 def _yahoo_closes(chart: dict[str, object], count: int) -> list[object]:
     indicators = chart.get("indicators")
     if not isinstance(indicators, dict):
@@ -463,6 +483,7 @@ def _yahoo_closes(chart: dict[str, object], count: int) -> list[object]:
     return list(closes)
 
 
+# Reads adjusted closes when provided and checks their alignment with timestamps.
 def _yahoo_adjusted(chart: dict[str, object], count: int) -> list[object] | None:
     indicators = chart.get("indicators")
     if not isinstance(indicators, dict):
@@ -484,6 +505,7 @@ def _yahoo_adjusted(chart: dict[str, object], count: int) -> list[object] | None
     return list(values)
 
 
+# Converts a timestamp to its New York date and checks the requested range.
 def _trading_date(
     timestamp: object,
     instrument: str,
@@ -503,6 +525,8 @@ def _trading_date(
     return observed
 
 
+# Prefers adjusted closes and uses regular closes when adjusted prices are absent.
+# Returns the chosen field name alongside the price so the source remains traceable.
 def _yahoo_price(
     close: object,
     adjusted: object,
@@ -521,6 +545,7 @@ def _yahoo_price(
     return None, ""
 
 
+# Accepts a missing price or a finite positive number and rejects other JSON values.
 def _json_price(value: object, label: str) -> float | None:
     if value is None:
         return None
@@ -532,6 +557,7 @@ def _json_price(value: object, label: str) -> float | None:
     return number
 
 
+# Checks CSV headers and row lengths before assigning values to columns.
 def _csv_table(text: str, label: str) -> tuple[list[str], list[dict[str, str]]]:
     reader = csv.reader(StringIO(text.lstrip("\ufeff")))
     try:
@@ -557,6 +583,7 @@ def _csv_table(text: str, label: str) -> tuple[list[str], list[dict[str, str]]]:
     return header, records
 
 
+# Reads a FRED observation date and verifies that it falls within the requested range.
 def _observation_date(
     text: str,
     instrument: str,
@@ -577,6 +604,7 @@ def _observation_date(
     return observed
 
 
+# Rejects repeated dates so one instrument observation is not counted twice.
 def _reject_duplicate(instrument: str, observed: date, seen: set[date]) -> None:
     if observed in seen:
         raise MarketDataError(
@@ -585,6 +613,8 @@ def _reject_duplicate(instrument: str, observed: date, seen: set[date]) -> None:
     seen.add(observed)
 
 
+# Converts a source value to a number while preserving recognized missing entries.
+# Requires positive values only for instruments whose prices or levels must be positive.
 def _number(text: str, *, label: str, require_positive: bool) -> float | None:
     if text in _MISSING_TOKENS:
         return None
@@ -599,6 +629,7 @@ def _number(text: str, *, label: str, require_positive: bool) -> float | None:
     return number
 
 
+# Stores a market observation with its units, provider details and retrieval time.
 def _row(
     spec: _Instrument,
     observed: date,
@@ -622,10 +653,12 @@ def _row(
     }
 
 
+# Keeps a stable link to the FRED series as the source for each observation.
 def _fred_source_url(spec: _Instrument) -> str:
     return f"{FRED_CSV_URL}?id={spec.provider_id}"
 
 
+# Keeps the instruments in the same display order throughout the saved market table.
 def _instrument_order(name: str) -> int:
     for position, spec in enumerate(MARKET_INSTRUMENTS):
         if spec.instrument == name:
@@ -633,6 +666,7 @@ def _instrument_order(name: str) -> int:
     raise MarketDataError(f"Unknown instrument {name}")
 
 
+# Combines downloads into a table and checks that all five instruments are present.
 def _as_frame(rows: list[dict[str, object]]) -> pd.DataFrame:
     found = {str(row["instrument"]) for row in rows}
     expected = set(_INSTRUMENTS_BY_NAME)
@@ -651,12 +685,15 @@ def _as_frame(rows: list[dict[str, object]]) -> pd.DataFrame:
     return frame.loc[:, list(OUTPUT_COLUMNS)]
 
 
+# Rejects repeated observations of the same instrument on the same date.
 def _reject_duplicate_frame_rows(frame: pd.DataFrame) -> None:
     duplicated = frame.duplicated(["instrument", "observation_date"], keep=False)
     if bool(duplicated.any()):
         raise MarketDataError("Duplicate instrument and observation_date rows")
 
 
+# Checks that all five instruments have the expected labels and yield units.
+# Only GLD should be marked as a proxy because the study uses it in place of spot gold.
 def _require_market_table(frame: pd.DataFrame) -> None:
     missing = [column for column in OUTPUT_COLUMNS if column not in frame.columns]
     if missing:
