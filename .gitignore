@@ -14,7 +14,7 @@ data/raw/
 data/interim/
 data/private/
 output/report/*
-!output/report/Research\ Report.pdf
+!output/report/Research\ and\ Analysis.pdf
 *.parquet
 *.duckdb
 .codex-report-v3-build/
