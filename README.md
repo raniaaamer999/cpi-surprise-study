@@ -4,6 +4,7 @@ This project studies what happened in financial markets when United States
 inflation was different from what economists expected. It focuses on a simple
 question: when a CPI release surprised the market, how did Treasury yields,
 the United States dollar, the S&P 500, and gold respond?
+[Read the research report](output/report/Research%20and%20Analysis.pdf)
 
 ## Why I built it
 
