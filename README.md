@@ -1,6 +1,6 @@
 # US CPI Surprise and Cross Asset Reaction Study
 
-This project studies how financial markets respond when United States inflation differs from what economists expected. It focuses on Treasury yields, the EUR/USD exchange rate, the S&P 500 and gold. The analysis compares the CPI value reported at release with the survey median recorded beforehand.
+This project studies how financial markets respond when United States inflation differs from what economists expected. It focuses on Treasury yields, the EUR/USD exchange rate, the S&P 500 and gold.
 
 ## Research question
 
@@ -14,7 +14,7 @@ I then began to focus on expectations. A high inflation number may not surprise 
 
 ## Study design and data
 
-The sample covers 104 CPI announcement dates from January 2018 through September 2026. It contains 414 CPI measure observations, matched with five financial instruments to form 2,070 event and asset observations. The study uses four CPI measures and three reaction windows.
+The sample covers 104 CPI announcement dates from January 2018 through September 2026. Four measures across 104 dates create 416 possible date and measure combinations. Of these, 414 had usable CPI observations. Each usable observation is matched with five financial instruments, giving 2,070 event and asset rows. The study includes three reaction windows.
 
 | CPI measure | What it compares |
 |---|---|
@@ -31,44 +31,77 @@ The sample covers 104 CPI announcement dates from January 2018 through September
 | S&P 500 | A broad measure of large US company share prices |
 | GLD | A gold exchange traded fund used as a tradable gold proxy |
 
-The reaction windows are the release day, the next trading session and the fifth trading session.
+Bloomberg provided the originally reported CPI values, survey medians available before release, and release dates and times. FRED provided daily observations for Treasury yields, EUR/USD and the S&P 500. Yahoo Finance provided adjusted closing prices for GLD.
 
-Bloomberg provided the originally reported CPI values, survey medians available before release, and release dates and times. FRED provided daily observations for Treasury yields, EUR/USD and the S&P 500. Yahoo Finance provided adjusted closing prices for GLD. The licensed Bloomberg workbook is not included in this repository. Any use of Bloomberg data must follow the terms that apply to the user's access.
+## Methodology
 
-## How the analysis works
+### Step 1: Calculate the CPI surprise
 
-First, the CPI surprise is calculated as:
+For each CPI measure, the surprise is the original reported value minus the survey median recorded before release.
 
 ```text
-raw surprise = original CPI value - survey median recorded before release
+raw surprise = original CPI value - pre-release survey median
 ```
 
-A positive surprise means that CPI was higher than expected. A negative surprise means it was lower than expected.
+A positive surprise means CPI was higher than expected. A negative surprise means it was lower than expected. A zero surprise means the reported value matched the survey median.
 
-The raw surprise is then divided by the historical standard deviation of earlier surprises from the same CPI measure. At least 12 earlier observations are required. Only information available before each release is used, so a later CPI release cannot affect an earlier surprise score. This puts different CPI measures on a more comparable scale.
+### Step 2: Put surprises on a comparable scale
 
-For each event, market movements are measured from the last valid market observation before release. Treasury yield changes are measured in basis points. EUR/USD, the S&P 500 and GLD are measured as percentage returns. The code keeps a missing release day value missing rather than filling it with an earlier price.
+Headline and core CPI measures have different typical ranges. To compare them, each raw surprise is divided by the historical standard deviation of earlier surprises from the same measure.
 
-The main analysis contains 60 regression specifications: four CPI measures multiplied by five instruments multiplied by three reaction windows. Each regression estimates the average market movement associated with a one standard deviation CPI surprise. Ordinary least squares is used to estimate this relationship. HC3 standard errors provide the main uncertainty estimates. HAC standard errors are used as an additional check. The Benjamini-Hochberg procedure adjusts for testing many relationships at once.
+```text
+standardized surprise = raw surprise / standard deviation of earlier surprises
+```
 
-## Data checks and additional tests
+At least 12 earlier observations are required. Only information available before the release is used, so a later event cannot affect an earlier surprise score.
 
-The project includes checks designed to assess data quality and test how the analysis behaves under different choices:
+### Step 3: Measure the market response
 
-* Bloomberg's historical CPI tables are compared with its economic calendar records for agreement on actual values and survey medians.
-* The main analysis can be repeated using only observations where those Bloomberg records agree.
-* HC3 and HAC uncertainty estimates are compared.
-* Additional tests examine whether market movements continue or reverse after the release day.
-* The analysis compares estimates from before 2020 with estimates from 2020 onward.
-* Tests check for duplicate events, duplicate market records and missing observations.
+There are 414 usable CPI measure observations. Matching each one with five instruments gives:
 
-This README describes the checks but does not report their empirical outcomes.
+```text
+414 CPI measure observations x 5 instruments = 2,070 event and asset rows
+```
 
-## Conclusion and limitations
+Each row represents one CPI measure on one release date matched with one market instrument. The row contains the market reaction for three windows: the release day, the next valid trading session and the fifth valid trading session. Each window starts from the last valid market observation before the release.
 
-This project estimates relationships between CPI surprises and market movements around scheduled releases. It does not establish that CPI alone caused each movement. Daily prices can also reflect other news and market conditions. GLD is an exchange traded fund, not the spot gold price. The four CPI measures are related and are released together, so they are not independent tests of inflation. The analysis also does not directly measure investors' Federal Reserve expectations or test a trading strategy.
+Treasury yield changes are measured in basis points. EUR/USD, the S&P 500 and GLD are measured as percentage returns. A missing release day price is kept missing rather than filled using an earlier price.
 
-This README focuses on the research question, data structure and analysis method. It does not state the market findings or list regression estimates. The analysis is designed to test how CPI surprises relate to market movements, not to prove what caused each move.
+### Step 4: Group the rows and estimate the relationships
+
+The analysis asks a separate question for each CPI measure, instrument and reaction window. First, four CPI measures and five instruments form 20 CPI and instrument groups:
+
+```text
+4 CPI measures x 5 instruments = 20 groups
+```
+
+Each group has three reaction windows. One regression is run for each window:
+
+```text
+20 groups x 3 reaction windows = 60 ordinary least squares regressions
+```
+
+Each regression uses about 102 to 104 release observations. Ordinary least squares, or OLS, finds the straight line that makes the squared gaps between the observed market reactions and the line's estimates as small as possible. The slope of that line is called beta. It estimates the average market movement linked with a one standard deviation increase in the CPI surprise.
+
+### Step 5: Check uncertainty and repeated testing
+
+HC3 standard errors are used for the main confidence intervals and p-values. HAC standard errors provide an additional check that allows nearby observations to be related.
+
+The analysis tests 60 primary relationships. Benjamini-Hochberg false discovery rate correction adjusts the p-values together, reducing the chance of treating results as reliable simply because many relationships were tested. A corrected q-value below 0.05 is the chosen threshold for statistical significance.
+
+## Data quality and additional checks
+
+The project includes several checks. Bloomberg's historical CPI tables are compared with its economic calendar records for agreement on actual values and survey medians. The analysis can also be repeated using only observations where the two records agree. HC3 and HAC estimates are compared as an uncertainty check.
+
+Separate tests examine whether there is additional market movement after the release day and whether estimates differ before 2020 and from 2020 onward. Other checks look for duplicate releases, duplicate market records and missing prices.
+
+## Data access and publication restrictions
+
+The Bloomberg workbook is licensed data and is not included in this repository. Bloomberg advised that Bloomberg data and results based on it should not be posted on public sites without an appropriate redistribution agreement. Bloomberg also advised that data from a shared Student Lab Terminal should remain on the physical Terminal. This README describes the study design and analysis method. Follow the terms that apply to your access and the relevant university guidance before using or sharing Bloomberg data.
+
+## Scope and limitations
+
+This project is designed to measure how CPI surprises relate to market movements around scheduled releases. It does not prove that CPI alone caused a market move. Daily prices can also reflect other news and market conditions. GLD is an exchange traded fund, not the spot gold price. The four CPI measures are related and are released together, so they are not independent tests. The analysis does not directly measure investors' Federal Reserve expectations or test a trading strategy.
 
 ## Running the project
 
@@ -81,22 +114,15 @@ pip install -e '.[research,dev]'
 pytest
 ```
 
-The full pipeline can be run with:
-
-```bash
-python run_pipeline.py
-```
-
-The full run requires the Bloomberg workbook at `data/private/cpi_bloomberg_private.xlsx` and daily market data at `data/external/daily_market_data.csv`. The pipeline creates analysis files and charts locally. The Bloomberg workbook is not supplied here, and users must have authorized access before working with Bloomberg data. The automated tests use small example inputs and do not require the Bloomberg workbook or network access.
+The automated tests use small example inputs and do not require Bloomberg data or network access. `run_pipeline.py` coordinates the full analysis, which requires licensed CPI input. Use it only in an environment and workflow permitted by Bloomberg and the relevant university guidance. The licensed input is not supplied here. Generated analysis files, charts and reports are not included in this repository.
 
 ## Repository guide
 
 | Location | Purpose |
 |---|---|
-| `run_pipeline.py` | Runs the CPI data cleaning, event matching, analysis, chart creation and tests in order |
-| `src/macro_surprise/data/` | Downloads public market data and reads the private Bloomberg workbook |
+| `run_pipeline.py` | Coordinates the full analysis in an authorized environment |
+| `src/macro_surprise/data/` | Downloads public market data and reads licensed CPI input |
 | `src/macro_surprise/analysis/` | Calculates CPI surprises, market reactions and regression statistics |
 | `scripts/` | Builds the research charts |
 | `tests/` | Checks calculations, data handling and error cases |
 | `data/external/` | Stores public daily market data |
-| `data/private/` | Local location for the licensed Bloomberg workbook; excluded from Git |

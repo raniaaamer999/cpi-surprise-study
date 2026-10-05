@@ -13,8 +13,8 @@ tmp/
 data/raw/
 data/interim/
 data/private/
+output/charts/*
 output/report/*
-!output/report/Research\ and\ Analysis.pdf
 *.parquet
 *.duckdb
 .codex-report-v3-build/
