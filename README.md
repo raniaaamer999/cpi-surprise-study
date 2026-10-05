@@ -10,7 +10,7 @@ When a US CPI release is higher or lower than economists expected, how do these 
 
 I first studied inflation and interest rates while preparing for my O Level Economics exam. Textbooks gave me a clear idea of what should happen. Later, when I started following financial news at university, markets did not always move in the direction I expected. For a moment, I wondered whether I had misunderstood what I had learned.
 
-I then began to focus on expectations. A high inflation number may not surprise the market if investors already expected it. I built this study to examine the difference between the reported CPI value and the forecast available before its release, and to measure how that surprise relates to market movements.
+I then began to focus on expectations. A high inflation number may not surprise the market if investors already expected it. I built this study to examine the difference between the reported CPI value and the forecast available before its release and to measure how that surprise relates to market movements.
 
 ## Study design and data
 
