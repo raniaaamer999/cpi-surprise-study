@@ -97,7 +97,7 @@ Separate tests examine whether there is additional market movement after the rel
 
 ## Data access and publication restrictions
 
-The Bloomberg workbook is licensed data and is not included in this repository. Bloomberg advised that Bloomberg data and results based on it should not be posted on public sites without an appropriate redistribution agreement. Bloomberg also advised that data from a shared Student Lab Terminal should remain on the physical Terminal. This README describes the study design and analysis method. Follow the terms that apply to your access and the relevant university guidance before using or sharing Bloomberg data.
+The Bloomberg workbook is licensed data and is not included in this repository. Bloomberg advised that Bloomberg data and results based on it should not be posted on public sites without an appropriate redistribution agreement. Therefore, this README describes the study design and analysis method.
 
 ## Scope and limitations
 
